@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Yamazumi Homem × Máquina</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
   :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -147,6 +148,19 @@ textarea:focus{border-color:var(--accent);outline:none}
 #tip b{font-family:var(--f-mono);font-weight:600}
 footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);font-size:13.5px;color:var(--ink-3);max-width:78ch}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media print{
+  :root{--bg:#fff;--surface:#fff;--surface-2:#fff;--ink:#111;--ink-2:#333;--ink-3:#666;--line:#bbb;--grid:#ddd;--axis:#999}
+  .tools,.io,.iorow,.x,tfoot,#tip,.filein{display:none!important}
+  body{font-size:11pt}
+  .wrap{max-width:none;padding:0}
+  section{margin-top:14pt;break-inside:avoid}
+  .card,.d,.kpi,.param{break-inside:avoid}
+  .charts{grid-template-columns:1fr 1fr}
+  .card.span{grid-column:1/-1}
+  td input,td select{border:0;background:transparent;-webkit-appearance:none;appearance:none}
+  .tablewrap{overflow:visible}
+  table{min-width:0}
+}
 @media (max-width:560px){.d{grid-template-columns:1fr}.d .n{justify-self:start}}
 </style>
 </head>
@@ -158,6 +172,7 @@ footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);font-si
     <p class="sub">Cronoanálise de ciclo com separação de trabalho interno e externo. Compara a carga <strong>por peça</strong> contra o takt — a única comparação válida quando a máquina produz mais de uma peça por ciclo.</p>
   </div>
   <div class="tools">
+    <button id="bPdf" class="primary">Relatório PDF</button>
     <button id="bXlsIn">Importar Excel</button>
     <button id="bXlsOut">Exportar Excel</button>
     <button id="bIo" class="ghost">Texto / CSV</button>
@@ -379,10 +394,15 @@ const T=(x,y,s,o={})=>`<text x="${x}" y="${y}" fill="${o.fill||tok("--ink-2")}" 
   font-family="${o.mono?'IBM Plex Mono, monospace':'IBM Plex Sans, sans-serif'}" font-weight="${o.fw||400}"
   text-anchor="${o.ta||"start"}" ${o.dom?`dominant-baseline="${o.dom}"`:""}>${esc(s)}</text>`;
 function ticks(max,n=5){ if(max<=0)return[0,1];
-  const raw=max/n, p=Math.pow(10,Math.floor(Math.log10(raw)))||1;
-  const step=[1,2,2.5,5,10].map(m=>m*p).find(s=>s>=raw)||p*10;
-  const topo=Math.ceil(max/step)*step;            // o eixo precisa alcançar o maior valor
-  const out=[];for(let v=0;v<=topo+step*.001;v+=step)out.push(+v.toFixed(6));return out;}
+  const p=Math.pow(10,Math.floor(Math.log10(max)))||1;
+  let best=null;
+  [.1,.2,.25,.5,1,2,2.5,5,10].forEach(f=>{const step=f*p;
+    const topo=Math.ceil(max/step-1e-9)*step, cnt=Math.round(topo/step)+1;
+    if(cnt<3||cnt>n+4)return;                      // o eixo sempre alcança o maior valor
+    const alvo=Math.abs(cnt-(n+1));
+    if(!best||topo<best.topo-1e-9||(Math.abs(topo-best.topo)<1e-9&&alvo<best.alvo))best={step,topo,cnt,alvo};});
+  if(!best){const step=Math.pow(10,Math.ceil(Math.log10(max/n)));best={step,topo:Math.ceil(max/step)*step};}
+  const out=[];for(let v=0;v<=best.topo+best.step*1e-6;v+=best.step)out.push(+v.toFixed(6));return out;}
 const corta=(s,n)=>s.length>n?s.slice(0,n-1)+"…":s;
 // rótulo de valor: fora da barra quando couber, dentro quando não couber
 function rotulo(xFim,txt,cy,W,fs){const larg=txt.length*(fs*0.62)+10;
@@ -685,6 +705,238 @@ document.getElementById("bXlsOut").onclick=exportarXlsx;
 document.getElementById("bXlsIn").onclick=()=>document.getElementById("fileXls").click();
 document.getElementById("fileXls").onchange=e=>{const f=e.target.files&&e.target.files[0];
   if(f)importarXlsx(f);e.target.value="";};
+
+/* ---------- relatório PDF ---------- */
+const PDFC={"Manual":[46,109,180],"Externo":[168,39,63],"Interno":[78,139,51],"Automático":[107,114,128],
+  "Deslocamento":[122,78,149],"Espera":[201,113,31],"Outro":[0,139,128]};
+const P_INK=[22,32,43],P_INK2=[75,89,104],P_INK3=[122,136,149],P_LINE=[205,212,205],
+      P_BG=[242,244,241],P_ACC=[27,78,134],P_OK=[36,110,45],P_WARN=[160,100,20],P_CRIT=[168,39,63];
+const A=t=>String(t==null?"":t).replace(/[—–]/g,"-").replace(/[“”„]/g,'"').replace(/[’‘]/g,"'")
+  .replace(/→/g,"->").replace(/…/g,"...").replace(/≥/g,">=");
+
+function relatorioPdf(){
+  if(noVisualizador){msg("A geração de PDF fica bloqueada dentro do visualizador. Abra o arquivo HTML no seu computador.",true);return;}
+  const J=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF;
+  if(!J){msg("A biblioteca de PDF não carregou. Verifique a conexão e recarregue a página.",true);return;}
+  const m=calc();
+  if(!m.linhas.length){msg("Não há atividades ativas para relatar.",true);return;}
+  const doc=new J({unit:"mm",format:"a4",orientation:"portrait",compress:true});
+  const PW=210,PH=297,M=14,CW=PW-2*M;
+  let y=M, pag=1;
+  const F=(s,st)=>{doc.setFont("helvetica",st||"normal");doc.setFontSize(s);};
+  const cor=(c,fn)=>doc[fn||"setTextColor"](c[0],c[1],c[2]);
+
+  function rodape(){
+    F(7.5);cor(P_INK3);
+    doc.text(A(`Yamazumi Homem × Máquina · ${S.proc||"estudo sem nome"}`),M,PH-8);
+    doc.text(String(pag),PW-M,PH-8,{align:"right"});
+    doc.setDrawColor(...P_LINE);doc.setLineWidth(.2);doc.line(M,PH-11,PW-M,PH-11);
+  }
+  function novaPag(){rodape();doc.addPage();pag++;y=M;}
+  function espaco(h){if(y+h>PH-16)novaPag();}
+  function secao(t){espaco(14);F(11,"bold");cor(P_ACC);doc.text(A(t),M,y+4);
+    doc.setDrawColor(...P_ACC);doc.setLineWidth(.5);doc.line(M,y+6,PW-M,y+6);y+=11;}
+  function paragrafo(t,sz){F(sz||9);cor(P_INK2);
+    const ls=doc.splitTextToSize(A(t),CW);ls.forEach(l=>{espaco(5);doc.text(l,M,y+3.2);y+=4.4;});y+=1.5;}
+
+  /* ---- capa ---- */
+  doc.setFillColor(...P_ACC);doc.rect(0,0,PW,30,"F");
+  F(17,"bold");doc.setTextColor(255,255,255);
+  doc.text("Relatório Yamazumi",M,15);
+  F(10);doc.setTextColor(222,232,244);
+  doc.text(A("Análise Homem × Máquina · carga por peça, takt e trabalho interno/externo"),M,22.5);
+  y=38;
+  F(9);cor(P_INK2);
+  doc.text(A("Processo: "+(S.proc||"não informado")),M,y);
+  doc.text(A("Emitido em "+new Date().toLocaleString("pt-BR")),PW-M,y,{align:"right"});
+  y+=9;
+
+  /* ---- resumo executivo ---- */
+  secao("Resumo executivo");
+  const frases=[];
+  if(m.cicloAuto>0){
+    frases.push(`O ciclo efetivo de cada máquina é de ${n1(m.cicloEf)} s: ${n1(m.cicloAuto)} s de processamento automático mais `+
+      `${n1(m.parada)} s de trabalho executado com a máquina parada, que representam ${pc(m.cicloEf?m.parada/m.cicloEf:0)} do ciclo.`);
+    if(m.takt) frases.push(m.tpCel<=m.takt
+      ? `Com ${n0(m.nmaq)} máquina(s) em paralelo a célula entrega uma peça a cada ${n1(m.tpCel)} s e atende o takt de ${n1(m.takt)} s, com folga de ${n1(m.takt-m.tpCel)} s por peça.`
+      : `Com ${n0(m.nmaq)} máquina(s) em paralelo a célula entrega uma peça a cada ${n1(m.tpCel)} s e não atende o takt de ${n1(m.takt)} s: faltam ${n1(m.tpCel-m.takt)} s por peça.`);
+  }
+  if(m.gargalo) frases.push(m.util>1
+    ? `O operador está sobrecarregado: ${n1(m.carga)} s de trabalho dentro de um ciclo de ${n1(m.cicloEf)} s (${pc(m.util)}). Não é possível atender ${n0(m.nmaq)} máquina(s) nesta configuração.`
+    : m.util>=.9 ? `O operador opera praticamente saturado, a ${pc(m.util)} do ciclo efetivo, sem folga para variação, abastecimento ou troca.`
+    : `O operador trabalha a ${pc(m.util)} do ciclo efetivo, com folga de capacidade.`);
+  if(m.parada>0) frases.push(`A alavanca principal é converter trabalho externo em interno: cada segundo retirado da máquina parada reduz `+
+    `${n2(m.ganho)} s no tempo por peça da célula, e converter metade dos ${n1(m.parada)} s externos levaria a célula a ${n1((m.cicloAuto+m.parada/2)/(m.ppc*m.nmaq))} s por peça.`);
+  if(m.semDur) frases.push(`Atenção: ${n0(m.semDur)} atividade(s) ativa(s) sem duração cronometrada. Os números acima estão subestimados até que a medição seja completada.`);
+  paragrafo(frases.join(" "),9.5);
+
+  /* ---- parâmetros ---- */
+  secao("Parâmetros do estudo");
+  const par=[["Takt time",n1(m.takt)+" s/peça"],["Peças por ciclo da máquina",n0(m.ppc)],
+    ["Máquinas por operador",n0(m.nmaq)],["Atividades ativas",n0(m.linhas.length)+" de "+n0(S.rows.length)]];
+  F(9);
+  par.forEach((p,i)=>{const x=M+(i%2)*(CW/2), yy=y+Math.floor(i/2)*6;
+    cor(P_INK3);doc.text(A(p[0]),x,yy+3.2);
+    cor(P_INK);doc.setFont("helvetica","bold");doc.text(A(p[1]),x+CW/2-6,yy+3.2,{align:"right"});
+    doc.setFont("helvetica","normal");});
+  y+=Math.ceil(par.length/2)*6+5;
+
+  /* ---- indicadores ---- */
+  secao("Indicadores do ciclo");
+  const K=[["Takt",n1(m.takt),"s/peça"],["Ciclo automático",n1(m.cicloAuto),"s"],
+    ["Máquina parada / ciclo",n1(m.parada),"s"],["Trabalho em paralelo",n1(m.paralelo),"s"],
+    ["Ciclo efetivo / máquina",n1(m.cicloEf),"s"],["Tempo por peça da célula",n1(m.tpCel),"s"],
+    ["Utilização do operador",pc(m.util),""],["Atividades sem duração",n0(m.semDur),""]];
+  const bw=CW/4, bh=17;
+  espaco(bh*2+4);
+  K.forEach((k,i)=>{const x=M+(i%4)*bw, yy=y+Math.floor(i/4)*bh;
+    doc.setFillColor(...P_BG);doc.setDrawColor(...P_LINE);doc.setLineWidth(.2);
+    doc.rect(x,yy,bw-1.5,bh-2,"FD");
+    F(6.5);cor(P_INK3);doc.splitTextToSize(A(k[0]),bw-6).slice(0,2).forEach((l,j)=>doc.text(l,x+2.5,yy+4+j*3));
+    F(13,"bold");cor(P_INK);doc.text(A(k[1]),x+2.5,yy+13.2);
+    const vw=doc.getTextWidth(A(k[1]));
+    if(k[2]){F(7);cor(P_INK3);doc.text(A(k[2]),x+2.5+vw+1.2,yy+13.2);}});
+  y+=bh*2+4;
+
+  /* ---- diagnóstico ---- */
+  secao("Diagnóstico");
+  diagDados(m).forEach(d=>{
+    const txt=doc.splitTextToSize(A(d.msg),CW-8);
+    const h=7+txt.length*3.9+3;
+    espaco(h);
+    const c=d.s==="crit"?P_CRIT:d.s==="warn"?P_WARN:P_OK;
+    doc.setFillColor(c[0],c[1],c[2]);doc.rect(M,y,1.4,h-2,"F");
+    F(9.5,"bold");cor(P_INK);doc.text(A(d.t),M+4.5,y+4);
+    cor(c);doc.text(A(d.n),PW-M,y+4,{align:"right"});
+    F(8.5,"normal");cor(P_INK2);txt.forEach((l,i)=>doc.text(l,M+4.5,y+8.6+i*3.9));
+    y+=h;});
+
+  /* ---- gráficos ---- */
+  const eixo=(x0,y0,w,h,top,tk,vert)=>{
+    doc.setDrawColor(228,232,227);doc.setLineWidth(.15);
+    F(6.5);cor(P_INK3);
+    tk.forEach(t=>{ if(vert){const yy=y0+h-t/top*h;doc.line(x0,yy,x0+w,yy);
+        doc.text(n0(t),x0-1.5,yy+1,{align:"right"});}
+      else{const xx=x0+t/top*w;doc.line(xx,y0,xx,y0+h);doc.text(n0(t),xx,y0+h+3.5,{align:"center"});}});
+    doc.setDrawColor(150,158,150);doc.setLineWidth(.25);
+    if(vert)doc.line(x0,y0+h,x0+w,y0+h);else doc.line(x0,y0,x0,y0+h);};
+
+  espaco(96);
+  secao("Carga por peça e composição por natureza");
+  {
+    const h=58,x0=M+11,w=CW-14;
+    const max=Math.max(m.takt||0,...m.porRec.map(r=>r.tpp))*1.15||1;
+    const tk=ticks(max,5),top=tk[tk.length-1];
+    eixo(x0,y,w,h,top,tk,true);
+    const gap=w/m.porRec.length, bw2=Math.min(26,gap*.55);
+    m.porRec.forEach((r,i)=>{const cx=x0+gap*i+gap/2;let acc=0;
+      NAT.forEach(n=>{const v=r.nat[n]/(r.pecas||1);if(v<=0)return;
+        const bh2=v/top*h, yy=y+h-(acc+v)/top*h;
+        const c=PDFC[n]||PDFC.Outro;doc.setFillColor(c[0],c[1],c[2]);
+        doc.rect(cx-bw2/2,yy,bw2,Math.max(.4,bh2-.5),"F");
+        if(bh2>6){F(7,"bold");doc.setTextColor(255,255,255);doc.text(n1(v),cx,yy+bh2/2+1.2,{align:"center"});}
+        acc+=v;});
+      F(8,"bold");cor(P_INK);doc.text(n1(acc),cx,y+h-acc/top*h-1.8,{align:"center"});
+      doc.text(A(r.rec),cx,y+h+7,{align:"center"});
+      F(6.5,"normal");cor(P_INK3);doc.text(A(`${n0(r.pecas)} peça${r.pecas>1?"s":""}`),cx,y+h+10.5,{align:"center"});
+      if(m.takt){const c=r.status==="crit"?P_CRIT:r.status==="warn"?P_WARN:P_OK;
+        F(6.5,"bold");cor(c);
+        doc.text(A(r.status==="crit"?"acima do takt":r.status==="warn"?"no limite":"dentro do takt"),cx,y+h+14,{align:"center"});}});
+    if(m.takt>0&&m.takt<=top){const ty=y+h-m.takt/top*h;
+      doc.setDrawColor(...P_CRIT);doc.setLineWidth(.5);doc.setLineDashPattern([1.6,1.2],0);
+      doc.line(x0,ty,x0+w,ty);doc.setLineDashPattern([],0);
+      F(7,"bold");cor(P_CRIT);doc.text(A(`takt ${n1(m.takt)} s/peça`),x0+1.5,ty-1.5);}
+    y+=h+19;
+  }
+
+  const barrasH=(titulo,itens,fmt)=>{
+    secao(titulo);
+    const rh=Math.max(4.6,Math.min(7,150/Math.max(1,itens.length))),h=itens.length*rh;
+    const lw=Math.min(72,CW*.42),x0=M+lw,w=CW-lw-16;
+    const max=Math.max(...itens.map(i=>i.v),1),tk=ticks(max,4),top=tk[tk.length-1];
+    espaco(h+10);
+    eixo(x0,y,w,h,top,tk,false);
+    itens.forEach((it,i)=>{const yy=y+i*rh, bw2=Math.max(.5,it.v/top*w);
+      const c=PDFC[it.nat]||PDFC.Outro;doc.setFillColor(c[0],c[1],c[2]);
+      doc.rect(x0,yy+rh*.18,bw2,rh*.64,"F");
+      F(Math.min(7.5,rh*1.25));cor(P_INK2);
+      doc.text(A(it.lab),x0-2,yy+rh*.68,{align:"right",maxWidth:lw-3});
+      F(Math.min(7.5,rh*1.25),"bold");
+      if(bw2+13<w){cor(P_INK2);doc.text((fmt||n1)(it.v),x0+bw2+1.5,yy+rh*.68);}
+      else{doc.setTextColor(255,255,255);doc.text((fmt||n1)(it.v),x0+bw2-1.5,yy+rh*.68,{align:"right"});}});
+    y+=h+10;};
+
+  barrasH("Distribuição do tempo por natureza",
+    m.dist.filter(d=>d.v>0).map(d=>({lab:d.nat,v:d.v,nat:d.nat})));
+  barrasH("Tempo por atividade",
+    m.linhas.filter(r=>r.dur>0).slice().sort((a,b)=>b.dur-a.dur).map(r=>({lab:r.ati,v:r.dur,nat:r.nat})));
+
+  /* ---- gantt ---- */
+  espaco(104);
+  secao("Linha do tempo Homem × Máquina");
+  {
+    const L=m.linhas, rh=Math.max(4.4,Math.min(7,170/Math.max(1,L.length))),h=L.length*rh;
+    const lw=Math.min(78,CW*.45),x0=M+lw,w=CW-lw-8;
+    const max=Math.max(...L.map(r=>r.fim),1),tk=ticks(max,6),top=tk[tk.length-1];
+    espaco(h+12);
+    eixo(x0,y,w,h,top,tk,false);
+    L.forEach((r,i)=>{const yy=y+i*rh,xx=x0+r.ini/top*w,bw2=Math.max(.5,r.dur/top*w);
+      const c=PDFC[r.nat]||PDFC.Outro;doc.setFillColor(c[0],c[1],c[2]);
+      doc.rect(xx,yy+rh*.18,bw2,rh*.64,"F");
+      F(Math.min(7,rh*1.2));cor(P_INK2);doc.text(A(r.ati),x0-2,yy+rh*.68,{align:"right",maxWidth:lw-3});});
+    y+=h+6;
+    F(6.5);cor(P_INK3);doc.text(A("segundos desde o início do estudo"),x0,y);y+=6;
+    const usadas=NAT.filter(n=>L.some(r=>r.nat===n));
+    let lx=M;F(7);
+    usadas.forEach(n=>{const c=PDFC[n];doc.setFillColor(c[0],c[1],c[2]);doc.rect(lx,y-2.4,3,3,"F");
+      cor(P_INK2);doc.text(A(n),lx+4.2,y);lx+=doc.getStringUnitWidth(A(n))*7/2.83+12;});
+    y+=8;
+  }
+
+  /* ---- resumo por recurso ---- */
+  const tabela=(titulo,cols,larg,linhas2)=>{
+    secao(titulo);
+    const desenhaCab=()=>{doc.setFillColor(...P_ACC);doc.rect(M,y,CW,6.5,"F");
+      F(7,"bold");doc.setTextColor(255,255,255);
+      let x=M+1.5;cols.forEach((c,i)=>{doc.text(A(c),larg[i]<0?x+Math.abs(larg[i])-3:x,y+4.4,
+        {align:larg[i]<0?"right":"left"});x+=Math.abs(larg[i]);});y+=6.5;};
+    desenhaCab();
+    linhas2.forEach((r,ri)=>{
+      F(7.2);
+      const partes=r.map((v,i)=>doc.splitTextToSize(A(v),Math.abs(larg[i])-3));
+      const nl=Math.max(...partes.map(q=>q.length));
+      const h=2.1+nl*3.5;
+      if(y+h>PH-16){novaPag();desenhaCab();}
+      if(ri%2){doc.setFillColor(246,247,245);doc.rect(M,y,CW,h,"F");}
+      F(7.2);cor(P_INK);let x=M+1.5;
+      partes.forEach((q,i)=>{const dir=larg[i]<0;
+        q.forEach((l,j)=>doc.text(l,dir?x+Math.abs(larg[i])-3:x,y+3.6+j*3.5,{align:dir?"right":"left"}));
+        x+=Math.abs(larg[i]);});
+      doc.setDrawColor(...P_LINE);doc.setLineWidth(.15);doc.line(M,y+h,PW-M,y+h);
+      y+=h;});
+    y+=6;};
+
+  const ST={ok:"Dentro do takt",warn:"No limite",crit:"Acima do takt","":"—"};
+  tabela("Resumo por recurso",
+    ["Recurso","Total (s)","Ciclos","Peças","Tempo/peça","Takt","Utilização","Status"],
+    [46,-20,-16,-16,-24,-18,-22,-20],
+    m.porRec.map(r=>[r.rec,n1(r.total),n0(r.ciclos),n0(r.pecas),n1(r.tpp),n1(m.takt),pc(r.util),ST[r.status]]));
+
+  const fim=new Map(m.linhas.map(r=>[r.id,r.fim])),ini=new Map(m.linhas.map(r=>[r.id,r.ini]));
+  tabela("Cronoanálise",
+    ["Recurso","Atividade","Natureza","Dur. (s)","Início","Fim","Ciclo","Ativo"],
+    [24,62,24,-16,-15,-15,-12,-14],
+    S.rows.filter(r=>r.ati.trim()).map(r=>[r.rec,r.ati,r.nat,
+      r.dur===null?"-":n1(r.dur),
+      r.ini===null?(ini.has(r.id)?n1(ini.get(r.id)):"-"):n1(r.ini),
+      fim.has(r.id)?n1(fim.get(r.id)):"-",n0(r.cic),r.on?"Sim":"Não"]));
+
+  rodape();
+  const nome=(S.proc||"yamazumi").replace(/[^\p{L}\p{N}]+/gu,"-").replace(/^-|-$/g,"").slice(0,40).toLowerCase();
+  try{doc.save(`relatorio-yamazumi-${nome||"estudo"}.pdf`);msg("Relatório PDF gerado.");}
+  catch(e){msg("O navegador bloqueou o download do PDF.",true);}
+}
+document.getElementById("bPdf").onclick=relatorioPdf;
 
 /* ---------- persistência local (conveniência; a página funciona sem ela) ---------- */
 function salvar(){try{localStorage.setItem("yamazumi",JSON.stringify(S));}catch{}}
