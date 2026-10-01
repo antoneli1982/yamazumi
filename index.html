@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Yamazumi Homem × Máquina</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  body{margin:0}
+  img{max-width:100%}
+  [hidden]{display:none!important}
+</style>
+<style>
+/* Layout: painel de instrumentação — faixa de parâmetros, régua de indicadores,
+   diagnóstico em lista, grade de gráficos 2×2 e a tabela de cronoanálise ao pé. */
+:root{
+  --bg:#F5F6F4; --surface:#FFFFFF; --surface-2:#EBEEEA; --surface-3:#E1E5E0;
+  --ink:#16202B; --ink-2:#4B5968; --ink-3:#7A8895; --line:#D7DCD7; --line-2:#C3C9C3;
+  --accent:#2E6DB4; --accent-2:#1B4E86;
+  --ok:#2F7D32; --warn:#B4721A; --crit:#A8273F;
+  --ok-bg:#E8F2E8; --warn-bg:#FBF1E0; --crit-bg:#F8E7EA;
+  --c-manual:#2E6DB4; --c-externo:#A8273F; --c-interno:#4E8B33;
+  --c-desloc:#7A4E95; --c-espera:#C9711F; --c-outro:#008B80; --c-auto:#6B7280;
+  --grid:#E4E8E3; --axis:#B6BDB6;
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#14181A; --surface:#1D2224; --surface-2:#262C2F; --surface-3:#30373A;
+  --ink:#E9EEEB; --ink-2:#AEBAB4; --ink-3:#7E8B86; --line:#333A3D; --line-2:#434B4F;
+  --accent:#5A93D6; --accent-2:#8CB5E4;
+  --ok:#6FBE6F; --warn:#E0A64B; --crit:#E07588;
+  --ok-bg:#1C2A1E; --warn-bg:#2C2518; --crit-bg:#2E1C20;
+  --c-manual:#5A93D6; --c-externo:#C94A62; --c-interno:#5CA23E;
+  --c-desloc:#9470BA; --c-espera:#C9772F; --c-outro:#0E9B8F; --c-auto:#9AA2AE;
+  --grid:#2A3134; --axis:#4B5457; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#14181A; --surface:#1D2224; --surface-2:#262C2F; --surface-3:#30373A;
+  --ink:#E9EEEB; --ink-2:#AEBAB4; --ink-3:#7E8B86; --line:#333A3D; --line-2:#434B4F;
+  --accent:#5A93D6; --accent-2:#8CB5E4;
+  --ok:#6FBE6F; --warn:#E0A64B; --crit:#E07588;
+  --ok-bg:#1C2A1E; --warn-bg:#2C2518; --crit-bg:#2E1C20;
+  --c-manual:#5A93D6; --c-externo:#C94A62; --c-interno:#5CA23E;
+  --c-desloc:#9470BA; --c-espera:#C9772F; --c-outro:#0E9B8F; --c-auto:#9AA2AE;
+  --grid:#2A3134; --axis:#4B5457; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5;margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:28px 56px}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;letter-spacing:-.015em;text-wrap:balance;margin:0}
+h1{font-size:clamp(22px,3.4vw,30px);line-height:1.15}
+h2{font-size:13px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
+.sub{color:var(--ink-2);font-size:13.5px;margin:6px 0 0;max-width:68ch}
+header.top{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between;
+  border-bottom:2px solid var(--ink);padding-bottom:16px}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+button{font-family:var(--f-body);font-size:12.5px;font-weight:500;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line-2);border-radius:3px;padding:7px 11px;cursor:pointer}
+button:hover{background:var(--surface-2);border-color:var(--ink-3)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover{background:var(--accent-2);border-color:var(--accent-2)}
+button.ghost{background:transparent}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+section{margin-top:34px}
+.sechead{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.hint{color:var(--ink-3);font-size:12px}
+
+.params{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.param{background:var(--surface);padding:11px 13px;min-width:0}
+.param label{display:block;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);margin-bottom:5px}
+.param input{width:100%;min-width:0;font-family:var(--f-mono);font-size:16px;font-weight:500;color:var(--ink);
+  background:transparent;border:0;border-bottom:1.5px solid var(--line-2);padding:2px 0}
+.param input:focus{border-bottom-color:var(--accent);outline:none}
+.param input[type=text]{font-family:var(--f-body);font-size:14px}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.kpi{background:var(--surface);padding:12px 13px;min-width:0}
+.kpi .k{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);line-height:1.35;min-height:2.7em}
+.kpi .v{font-family:var(--f-mono);font-size:24px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin-top:3px}
+.kpi .u{font-size:11px;color:var(--ink-3);font-family:var(--f-body);font-weight:400;margin-left:3px}
+
+.diag{display:flex;flex-direction:column;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.d{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;background:var(--surface);padding:10px 13px 10px 16px;
+  border-left:3px solid var(--line-2);align-items:baseline}
+.d.ok{border-left-color:var(--ok)} .d.warn{border-left-color:var(--warn)} .d.crit{border-left-color:var(--crit)}
+.d .t{font-weight:600;font-size:13px}
+.d .n{font-family:var(--f-mono);font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.d.ok .n{color:var(--ok)} .d.warn .n{color:var(--warn)} .d.crit .n{color:var(--crit)}
+.d .m{grid-column:1/-1;font-size:12.5px;color:var(--ink-2);max-width:78ch}
+
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:14px 14px 10px;min-width:0}
+.card h3{font-size:13.5px;font-weight:600;font-family:var(--f-body);letter-spacing:0}
+.card .cap{font-size:11.5px;color:var(--ink-3);margin:3px 0 10px}
+.card.span{grid-column:1/-1}
+.plot{width:100%;min-width:0}
+.plot svg{display:block;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:9px;font-size:11.5px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.sw{width:11px;height:11px;border-radius:2px;flex:none}
+.sw.line{height:0;width:14px;border-top:2px dashed var(--crit);border-radius:0}
+.empty{color:var(--ink-3);font-size:12.5px;padding:26px 4px;text-align:center}
+
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:12.5px}
+th{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;text-align:left;
+  padding:9px 8px;border-bottom:1px solid var(--line-2);white-space:nowrap;background:var(--surface-2)}
+td{padding:3px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr.off td{opacity:.42}
+td input,td select{font-family:var(--f-body);font-size:12.5px;color:var(--ink);background:transparent;
+  border:1px solid transparent;border-radius:3px;padding:4px 5px;width:100%;min-width:0}
+td input:hover,td select:hover{border-color:var(--line-2)}
+td input:focus,td select:focus{border-color:var(--accent);background:var(--surface);outline:none}
+td.num input{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+td.calc{font-family:var(--f-mono);text-align:right;color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.nat{display:inline-flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:2px;flex:none}
+.x{border:0;background:transparent;color:var(--ink-3);cursor:pointer;padding:4px 7px;font-size:14px;line-height:1}
+.x:hover{color:var(--crit);background:var(--crit-bg)}
+.chk{width:15px;height:15px;accent-color:var(--accent);cursor:pointer}
+.pill{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:9px;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.crit{background:var(--crit-bg);color:var(--crit)}
+.io{margin-top:12px;display:none}
+.io.open{display:block}
+textarea{width:100%;min-height:150px;font-family:var(--f-mono);font-size:11.5px;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line-2);border-radius:4px;padding:10px;resize:vertical}
+textarea:focus{border-color:var(--accent);outline:none}
+.iorow{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;align-items:center}
+.msg{font-size:12px;color:var(--ok);font-weight:500}
+.msg.bad{color:var(--crit)}
+#tip{position:fixed;z-index:50;pointer-events:none;background:var(--ink);color:var(--bg);font-size:11.5px;
+  padding:6px 9px;border-radius:4px;max-width:260px;line-height:1.4;opacity:0;transition:opacity .09s}
+#tip b{font-family:var(--f-mono);font-weight:600}
+footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink-3);max-width:80ch}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media (max-width:560px){.d{grid-template-columns:1fr}.d .n{justify-self:start}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div>
+    <h1>Yamazumi Homem × Máquina</h1>
+    <p class="sub">Cronoanálise de ciclo com separação de trabalho interno e externo. Compara a carga <strong>por peça</strong> contra o takt — a única comparação válida quando a máquina produz mais de uma peça por ciclo.</p>
+  </div>
+  <div class="tools">
+    <button id="bAdd" class="primary">Nova atividade</button>
+    <button id="bSeq" class="ghost">Sequenciar inícios</button>
+    <button id="bIo" class="ghost">Importar / exportar</button>
+    <button id="bEx" class="ghost">Carregar exemplo</button>
+    <button id="bClr" class="ghost">Limpar tudo</button>
+  </div>
+</header>
+
+<section>
+  <div class="sechead"><h2>Parâmetros do estudo</h2></div>
+  <div class="params">
+    <div class="param"><label for="pProc">Processo</label><input type="text" id="pProc"></div>
+    <div class="param"><label for="pTakt">Takt time (s/peça)</label><input type="number" id="pTakt" min="0" step="0.1"></div>
+    <div class="param"><label for="pPpc">Peças por ciclo da máquina</label><input type="number" id="pPpc" min="1" step="1"></div>
+    <div class="param"><label for="pNmaq">Máquinas por operador</label><input type="number" id="pNmaq" min="1" step="1"></div>
+  </div>
+</section>
+
+<section>
+  <div class="sechead"><h2>Indicadores do ciclo</h2></div>
+  <div class="kpis" id="kpis"></div>
+</section>
+
+<section>
+  <div class="sechead"><h2>Diagnóstico</h2><span class="hint">Recalculado a cada alteração</span></div>
+  <div class="diag" id="diag"></div>
+</section>
+
+<section>
+  <div class="sechead"><h2>Gráficos</h2><span class="hint">Passe o cursor sobre as barras para ver os valores</span></div>
+  <div class="charts">
+    <div class="card"><h3>Carga por peça e composição por natureza</h3>
+      <p class="cap">Tempo de cada recurso dividido pelas peças que ele entrega. A linha tracejada é o takt.</p>
+      <div class="plot" id="c1"></div><div class="legend" id="l1"></div></div>
+    <div class="card"><h3>Distribuição do tempo por natureza</h3>
+      <p class="cap">Para onde vai o tempo total do estudo, somando todos os recursos ativos.</p>
+      <div class="plot" id="c2"></div></div>
+    <div class="card span"><h3>Linha do tempo Homem × Máquina</h3>
+      <p class="cap">Quando cada atividade acontece no ciclo. Barras que se sobrepõem no eixo indicam trabalho em paralelo.</p>
+      <div class="plot" id="c3"></div><div class="legend" id="l3"></div></div>
+    <div class="card span"><h3>Tempo por atividade</h3>
+      <p class="cap">Duração de cada atividade, classificada por natureza. É aqui que se escolhe o que atacar primeiro.</p>
+      <div class="plot" id="c4"></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="sechead"><h2>Cronoanálise</h2><span class="hint" id="rowinfo"></span></div>
+  <div class="tablewrap"><table>
+    <thead><tr>
+      <th style="width:34px">Ativo</th><th style="width:110px">Recurso</th><th>Atividade</th>
+      <th style="width:132px">Natureza</th><th style="width:86px">Duração (s)</th>
+      <th style="width:86px">Início (s)</th><th style="width:64px">Fim</th><th style="width:62px">Ciclo</th><th style="width:34px"></th>
+    </tr></thead><tbody id="tbody"></tbody>
+  </table></div>
+
+  <div class="io" id="io">
+    <p class="hint" style="margin:14px 0 6px">Uma linha por atividade, separada por ponto e vírgula: <code>recurso;atividade;natureza;duração;início;ciclo;ativo</code></p>
+    <textarea id="csv" spellcheck="false" aria-label="Dados em CSV"></textarea>
+    <div class="iorow">
+      <button id="bCopy" class="primary">Copiar</button>
+      <button id="bLoad">Substituir dados pelo conteúdo acima</button>
+      <span class="msg" id="iomsg"></span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <strong>Convenção.</strong> Externo é o trabalho que exige a máquina parada e soma ao ciclo efetivo; interno é o executado durante o ciclo automático e não soma. O ciclo efetivo de cada máquina é o tempo automático mais o trabalho externo, e é ele que limita a produção. Um recurso é tratado como operador quando nenhuma de suas atividades é automática.
+</footer>
+</div>
+<div id="tip" role="status"></div>
+
+<script>
+const NAT=["Manual","Externo","Interno","Automático","Deslocamento","Espera","Outro"];
+const CSS={"Manual":"--c-manual","Externo":"--c-externo","Interno":"--c-interno","Automático":"--c-auto",
+ "Deslocamento":"--c-desloc","Espera":"--c-espera","Outro":"--c-outro"};
+const cor=n=>getComputedStyle(document.documentElement).getPropertyValue(CSS[n]||"--c-outro").trim()||"#888";
+const tok=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const n1=v=>(isFinite(v)?v:0).toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1});
+const n0=v=>(isFinite(v)?v:0).toLocaleString("pt-BR",{maximumFractionDigits:0});
+const pc=v=>(isFinite(v)?v*100:0).toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})+"%";
+
+const EXEMPLO={proc:"Fundição ASAL — 2 ciclos M1 + 2 ciclos M2",takt:72,ppc:2,nmaq:2,rows:[
+ ["Operador","Retirar ASAL da estufa e caminhar até a máquina","Externo",8,0,1],
+ ["Operador","Posicionar o ASAL e colocar tal no molde","Externo",17,8,1],
+ ["Operador","Fechar o molde e calibrar o ASAL","Externo",14,25,1],
+ ["Operador","Caminhar até o forno de alfin e retirar 2 porta-anéis","Externo",12,39,1],
+ ["Operador","Caminhar até o forno de alfin e apertar o ciclo da máquina","Externo",18,51,1],
+ ["Operador","Caminhar até o forno de alfin e repor 2 porta-anéis","Interno",16,69,1],
+ ["Operador","Caminhar até a máquina, retirar 2 peças e dispor no cesto","Interno",19,85,1],
+ ["Operador","Caminhar para a outra máquina; início do passo 1 na M2","Deslocamento",null,104,1],
+ ["M1","Ciclo automático M1 #1","Automático",148,0,1],
+ ["M1","Ciclo automático M1 #2","Automático",148,288,2],
+ ["M2","Ciclo automático M2 #1","Automático",148,192,1],
+ ["M2","Ciclo automático M2 #2","Automático",148,480,2]]};
+
+let uid=1, S={proc:"",takt:0,ppc:1,nmaq:1,rows:[]};
+const mk=(r,a,n,d,i,c,on)=>({id:uid++,rec:r||"",ati:a||"",nat:NAT.includes(n)?n:"Outro",
+  dur:(d===null||d===""||d===undefined)?null:+d, ini:(i===null||i===""||i===undefined)?null:+i, cic:+c||1, on:on!==false});
+function carregar(e){S={proc:e.proc,takt:e.takt,ppc:e.ppc,nmaq:e.nmaq,rows:e.rows.map(r=>mk(...r))};}
+
+/* ---------- motor de cálculo ---------- */
+function calc(){
+  const at=S.rows.filter(r=>r.on&&r.ati.trim()!=="");
+  const takt=+S.takt||0, ppc=Math.max(1,+S.ppc||1), nmaq=Math.max(1,+S.nmaq||1);
+  const recs=[...new Set(at.map(r=>r.rec.trim()||"(sem recurso)"))];
+  const corrida={};
+  const linhas=at.map(r=>{
+    const rec=r.rec.trim()||"(sem recurso)", dur=+r.dur||0;
+    const ini=(r.ini===null||!isFinite(r.ini))?(corrida[rec]||0):+r.ini;
+    corrida[rec]=ini+dur;
+    return {...r,rec,dur,ini,fim:ini+dur};
+  });
+  const porRec=recs.map(rec=>{
+    const rs=linhas.filter(r=>r.rec===rec);
+    const nat={}; NAT.forEach(n=>nat[n]=rs.filter(r=>r.nat===n).reduce((a,r)=>a+r.dur,0));
+    const total=rs.reduce((a,r)=>a+r.dur,0);
+    const ciclos=Math.max(1,...rs.map(r=>+r.cic||1));
+    const maquina=nat["Automático"]>0;
+    const pecas=ciclos*ppc, tpp=pecas?total/pecas:0;
+    return {rec,nat,total,ciclos,pecas,tpp,maquina,util:takt?tpp/takt:0,
+      status:!takt?"":(tpp>takt?"crit":(tpp>=takt*0.9?"warn":"ok"))};
+  });
+  const ops=porRec.filter(r=>!r.maquina), maqs=porRec.filter(r=>r.maquina);
+  const autos=linhas.filter(r=>r.nat==="Automático"&&r.dur>0);
+  const cicloAuto=autos.length?autos.reduce((a,r)=>a+r.dur,0)/autos.length:0;
+  const opLinhas=linhas.filter(r=>ops.some(o=>o.rec===r.rec));
+  const parada=opLinhas.filter(r=>r.nat==="Externo"||r.nat==="Manual").reduce((a,r)=>a+r.dur,0);
+  const paralelo=opLinhas.filter(r=>r.nat==="Interno").reduce((a,r)=>a+r.dur,0);
+  const cicloEf=cicloAuto+parada;
+  const gargalo=ops.slice().sort((a,b)=>b.total-a.total)[0]||null;
+  const trabOp=gargalo?gargalo.total/gargalo.ciclos:0;
+  const carga=trabOp*nmaq;
+  const util=cicloEf>0?carga/cicloEf:0;
+  const tp1=ppc?cicloEf/ppc:0, tpCel=(ppc&&nmaq)?cicloEf/(ppc*nmaq):0;
+  const maxMaq=trabOp>0?Math.floor(cicloEf/trabOp):0;
+  const ganho=(ppc&&nmaq)?1/(ppc*nmaq):0;
+  const dist=NAT.map(n=>({nat:n,v:linhas.filter(r=>r.nat===n).reduce((a,r)=>a+r.dur,0)}));
+  const totalGeral=dist.reduce((a,d)=>a+d.v,0);
+  const semDur=S.rows.filter(r=>r.on&&r.ati.trim()!==""&&(r.dur===null||!isFinite(r.dur))).length;
+  return {linhas,porRec,ops,maqs,takt,ppc,nmaq,cicloAuto,parada,paralelo,cicloEf,gargalo,trabOp,
+    carga,util,tp1,tpCel,maxMaq,ganho,dist,totalGeral,semDur};
+}
+
+/* ---------- indicadores ---------- */
+function kpis(m){
+  const K=[["Takt",n1(m.takt),"s/peça"],["Ciclo automático",n1(m.cicloAuto),"s"],
+   ["Máquina parada por ciclo",n1(m.parada),"s"],["Trabalho em paralelo",n1(m.paralelo),"s"],
+   ["Ciclo efetivo por máquina",n1(m.cicloEf),"s"],["Tempo por peça da célula",n1(m.tpCel),"s"],
+   ["Utilização do operador",pc(m.util),""],["Atividades sem duração",n0(m.semDur),""]];
+  kpisEl.innerHTML=K.map(([k,v,u])=>`<div class="kpi"><div class="k">${esc(k)}</div>
+    <div class="v">${esc(v)}${u?`<span class="u">${esc(u)}</span>`:""}</div></div>`).join("");
+}
+
+/* ---------- diagnóstico ---------- */
+function diag(m){
+  const D=[];
+  const add=(t,n,s,msg)=>D.push({t,n,s,msg});
+  if(!m.linhas.length){diagEl.innerHTML=`<div class="d"><div class="m">Sem atividades ativas. Adicione linhas na cronoanálise ou carregue o exemplo.</div></div>`;return;}
+  if(m.cicloAuto>0){
+    add("Ciclo efetivo por máquina",n1(m.cicloEf)+" s",m.parada>m.cicloAuto*0.3?"warn":"ok",
+      `Tempo automático de ${n1(m.cicloAuto)} s mais ${n1(m.parada)} s de trabalho com a máquina parada. `+
+      `A parcela parada representa ${pc(m.cicloEf?m.parada/m.cicloEf:0)} do ciclo e é o alvo principal: converter trabalho externo em interno encurta o ciclo sem investimento.`);
+    const s1=m.takt&&m.tp1<=m.takt?"ok":"crit";
+    add("Tempo por peça com uma máquina",n1(m.tp1)+" s",s1,
+      m.takt? (m.tp1<=m.takt?`Uma máquina sozinha já atende o takt de ${n1(m.takt)} s.`
+        :`Acima do takt de ${n1(m.takt)} s por peça. Uma única máquina não sustenta a demanda; são necessárias ${Math.max(2,Math.ceil(m.tp1/m.takt))} em paralelo.`)
+        :"Informe o takt para avaliar.");
+    if(m.nmaq>1){
+      const s2=m.takt&&m.tpCel<=m.takt?"ok":"crit";
+      add(`Tempo por peça com ${n0(m.nmaq)} máquinas`,n1(m.tpCel)+" s",s2,
+        m.takt?(m.tpCel<=m.takt?`A célula atende o takt, com folga de ${n1(m.takt-m.tpCel)} s por peça.`
+          :`A célula não atende o takt nem com ${n0(m.nmaq)} máquinas; faltam ${n1(m.tpCel-m.takt)} s por peça.`):"Informe o takt para avaliar.");
+    }
+  }
+  if(m.gargalo){
+    const s=m.util>1?"crit":(m.util>=0.9?"warn":"ok");
+    add("Utilização do operador",pc(m.util),s,
+      m.util>1?`Sobrecarga: ${n1(m.carga)} s de trabalho dentro de um ciclo de ${n1(m.cicloEf)} s. O operador não consegue atender ${n0(m.nmaq)} máquinas.`
+      :m.util>=0.9?`Praticamente saturado: ${n1(m.carga)} s de trabalho em um ciclo de ${n1(m.cicloEf)} s. Não há folga para variação, abastecimento ou troca.`
+      :`${n1(m.carga)} s de trabalho em um ciclo de ${n1(m.cicloEf)} s. Há folga de capacidade.`);
+    add("Máquinas que o operador atende",n0(m.maxMaq),m.maxMaq<m.nmaq?"crit":"ok",
+      `Limite teórico pelo ciclo efetivo (${n1(m.cicloEf)} s) dividido pelo trabalho por máquina (${n1(m.trabOp)} s). `+
+      (m.maxMaq<m.nmaq?`O parâmetro atual, ${n0(m.nmaq)}, está acima desse limite.`:`O parâmetro atual é ${n0(m.nmaq)}.`));
+  }
+  if(m.parada>0&&m.ganho>0)
+    add("Ganho por segundo convertido",n1(m.ganho).replace(",0",",00")+" s",'ok',
+      `Cada segundo retirado do trabalho com máquina parada reduz ${n1(m.ganho)} s no tempo por peça da célula. `+
+      `Converter metade dos ${n1(m.parada)} s externos levaria a célula a ${n1((m.cicloAuto+m.parada/2)/(m.ppc*m.nmaq))} s por peça.`);
+  const acima=m.porRec.filter(r=>r.status==="crit");
+  if(acima.length&&m.takt) add("Recursos acima do takt",n0(acima.length),"warn",
+    acima.map(r=>`${r.rec} a ${n1(r.tpp)} s/peça`).join(" · ")+".");
+  if(m.semDur) add("Pendências de cronometragem",n0(m.semDur),"warn",
+    `Há atividade ativa sem duração informada. Enquanto não for medida, a carga está subestimada e o diagnóstico é otimista.`);
+  diagEl.innerHTML=D.map(d=>`<div class="d ${d.s}"><div class="t">${esc(d.t)}</div><div class="n">${esc(d.n)}</div>
+    <div class="m">${esc(d.msg)}</div></div>`).join("");
+}
+
+/* ---------- SVG ---------- */
+const SV=(w,h,inner)=>`<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img">${inner}</svg>`;
+const T=(x,y,s,o={})=>`<text x="${x}" y="${y}" fill="${o.fill||tok("--ink-2")}" font-size="${o.fs||11}"
+  font-family="${o.mono?'IBM Plex Mono, monospace':'IBM Plex Sans, sans-serif'}" font-weight="${o.fw||400}"
+  text-anchor="${o.ta||"start"}" ${o.dom?`dominant-baseline="${o.dom}"`:""}>${esc(s)}</text>`;
+function ticks(max,n=5){ if(max<=0)return[0];
+  const raw=max/n, p=Math.pow(10,Math.floor(Math.log10(raw)))||1;
+  const step=[1,2,2.5,5,10].map(m=>m*p).find(s=>s>=raw)||p*10;
+  const out=[];for(let v=0;v<=max+step*.001;v+=step)out.push(+v.toFixed(6));return out;}
+const corta=(s,n)=>s.length>n?s.slice(0,n-1)+"…":s;
+const D=(o)=>Object.entries(o).map(([k,v])=>`data-${k}="${esc(v)}"`).join(" ");
+
+function g1(m,W){
+  const box=document.getElementById("c1");
+  if(!m.porRec.length){box.innerHTML=`<p class="empty">Sem recursos ativos.</p>`;l1.innerHTML="";return;}
+  const H=250,ml=46,mr=14,mt=16,mb=46,pw=W-ml-mr,ph=H-mt-mb;
+  const max=Math.max(m.takt||0,...m.porRec.map(r=>r.tpp))*1.18||1;
+  const tk=ticks(max),top=tk[tk.length-1];
+  const y=v=>mt+ph-(v/top)*ph;
+  const bw=Math.min(78,pw/m.porRec.length*0.6), gap=pw/m.porRec.length;
+  let s=tk.map(t=>`<line x1="${ml}" y1="${y(t)}" x2="${W-mr}" y2="${y(t)}" stroke="${tok("--grid")}"/>`
+    +T(ml-7,y(t)+3.5,n0(t),{ta:"end",fs:10,mono:1,fill:tok("--ink-3")})).join("");
+  m.porRec.forEach((r,i)=>{
+    const cx=ml+gap*i+gap/2, x=cx-bw/2; let acc=0;
+    NAT.forEach(n=>{ const v=r.nat[n]/(r.pecas||1); if(v<=0)return;
+      const h=(v/top)*ph, yy=y(acc+v);
+      s+=`<rect class="mk" x="${x}" y="${yy}" width="${bw}" height="${Math.max(0,h-2)}" fill="${cor(n)}" rx="1.5"
+        ${D({t:`${r.rec} · ${n}`,v:`${n1(v)} s/peça`})}/>`;
+      if(h>18) s+=T(cx,yy+h/2+3.5,n1(v),{ta:"middle",fs:10.5,mono:1,fw:600,fill:"#fff"});
+      acc+=v;});
+    s+=T(cx,y(acc)-7,n1(acc),{ta:"middle",fs:11.5,mono:1,fw:600,fill:tok("--ink")});
+    s+=T(cx,H-mb+16,corta(r.rec,14),{ta:"middle",fs:11.5,fw:600,fill:tok("--ink")});
+    s+=T(cx,H-mb+30,`${n0(r.pecas)} peça${r.pecas>1?"s":""}`,{ta:"middle",fs:10,fill:tok("--ink-3")});
+    if(m.takt) s+=T(cx,H-mb+42,r.status==="crit"?"acima do takt":r.status==="warn"?"no limite":"dentro do takt",
+      {ta:"middle",fs:9.5,fw:600,fill:tok(r.status==="crit"?"--crit":r.status==="warn"?"--warn":"--ok")});
+  });
+  if(m.takt>0&&m.takt<=top){ const ty=y(m.takt);
+    s+=`<line x1="${ml}" y1="${ty}" x2="${W-mr}" y2="${ty}" stroke="${tok("--crit")}" stroke-width="2" stroke-dasharray="7 5"/>`
+      +T(W-mr,ty-6,`takt ${n1(m.takt)} s`,{ta:"end",fs:10.5,mono:1,fw:600,fill:tok("--crit")});}
+  s+=`<line x1="${ml}" y1="${mt+ph}" x2="${W-mr}" y2="${mt+ph}" stroke="${tok("--axis")}"/>`;
+  s+=T(10,mt+ph/2,"s/peça",{ta:"middle",fs:10,fill:tok("--ink-3")}).replace("<text",`<text transform="rotate(-90 10 ${mt+ph/2})"`);
+  box.innerHTML=SV(W,H,s);
+  l1.innerHTML=NAT.filter(n=>m.porRec.some(r=>r.nat[n]>0)).map(n=>
+    `<span><i class="sw" style="background:${cor(n)}"></i>${esc(n)}</span>`).join("")
+    +(m.takt?`<span><i class="sw line"></i>Takt</span>`:"");
+}
+
+function g2(m,W){
+  const box=document.getElementById("c2");
+  const d=m.dist.filter(x=>x.v>0);
+  if(!d.length){box.innerHTML=`<p class="empty">Sem tempos lançados.</p>`;return;}
+  const rh=30,H=d.length*rh+34,ml=Math.min(108,W*0.3),mr=56,pw=W-ml-mr;
+  const max=Math.max(...d.map(x=>x.v)),tk=ticks(max,4),top=tk[tk.length-1]||1;
+  let s=tk.map(t=>`<line x1="${ml+t/top*pw}" y1="8" x2="${ml+t/top*pw}" y2="${d.length*rh+10}" stroke="${tok("--grid")}"/>`
+    +T(ml+t/top*pw,H-6,n0(t),{ta:"middle",fs:10,mono:1,fill:tok("--ink-3")})).join("");
+  d.forEach((x,i)=>{const yy=10+i*rh, w=Math.max(2,x.v/top*pw);
+    s+=`<rect class="mk" x="${ml}" y="${yy+5}" width="${w}" height="${rh-13}" fill="${cor(x.nat)}" rx="1.5"
+      ${D({t:x.nat,v:`${n1(x.v)} s · ${pc(x.v/m.totalGeral)} do total`})}/>`;
+    s+=T(ml-8,yy+rh/2-1,corta(x.nat,16),{ta:"end",fs:11.5,fw:500,fill:tok("--ink"),dom:"middle"});
+    s+=T(ml+w+7,yy+rh/2-1,n1(x.v),{fs:11,mono:1,fw:600,fill:tok("--ink-2"),dom:"middle"});});
+  s+=`<line x1="${ml}" y1="8" x2="${ml}" y2="${d.length*rh+10}" stroke="${tok("--axis")}"/>`;
+  box.innerHTML=SV(W,H,s);
+}
+
+function g3(m,W){
+  const box=document.getElementById("c3");
+  const L=m.linhas;
+  if(!L.length){box.innerHTML=`<p class="empty">Sem atividades ativas.</p>`;l3.innerHTML="";return;}
+  const rh=22,H=L.length*rh+36,ml=Math.min(272,Math.max(96,W*0.33)),mr=22,pw=W-ml-mr;
+  const max=Math.max(...L.map(r=>r.fim),1),tk=ticks(max,6),top=tk[tk.length-1]||1;
+  let s=tk.map(t=>`<line x1="${ml+t/top*pw}" y1="6" x2="${ml+t/top*pw}" y2="${L.length*rh+8}" stroke="${tok("--grid")}"/>`
+    +T(ml+t/top*pw,H-8,n0(t),{ta:"middle",fs:10,mono:1,fill:tok("--ink-3")})).join("");
+  const chars=Math.max(10,Math.floor(ml/6.1));
+  L.forEach((r,i)=>{const yy=8+i*rh, x=ml+r.ini/top*pw, w=Math.max(2,r.dur/top*pw);
+    s+=`<rect class="mk" x="${x}" y="${yy+4}" width="${w}" height="${rh-9}" fill="${cor(r.nat)}" rx="1.5"
+      ${D({t:r.ati,v:`${r.rec} · ${n1(r.dur)} s · de ${n1(r.ini)} a ${n1(r.fim)} s`})}/>`;
+    s+=T(ml-8,yy+rh/2+1,corta(r.ati,chars),{ta:"end",fs:10.5,fill:tok("--ink-2"),dom:"middle"});});
+  s+=`<line x1="${ml}" y1="6" x2="${ml}" y2="${L.length*rh+8}" stroke="${tok("--axis")}"/>`;
+  s+=T(ml,H-22,"segundos desde o início do estudo",{fs:10,fill:tok("--ink-3")});
+  box.innerHTML=SV(W,H,s);
+  l3.innerHTML=NAT.filter(n=>L.some(r=>r.nat===n)).map(n=>
+    `<span><i class="sw" style="background:${cor(n)}"></i>${esc(n)}</span>`).join("");
+}
+
+function g4(m,W){
+  const box=document.getElementById("c4");
+  const L=m.linhas.slice().filter(r=>r.dur>0).sort((a,b)=>b.dur-a.dur);
+  if(!L.length){box.innerHTML=`<p class="empty">Sem durações lançadas.</p>`;return;}
+  const rh=24,H=L.length*rh+30,ml=Math.min(272,Math.max(96,W*0.33)),mr=58,pw=W-ml-mr;
+  const max=Math.max(...L.map(r=>r.dur)),tk=ticks(max,4),top=tk[tk.length-1]||1;
+  let s=tk.map(t=>`<line x1="${ml+t/top*pw}" y1="6" x2="${ml+t/top*pw}" y2="${L.length*rh+8}" stroke="${tok("--grid")}"/>`
+    +T(ml+t/top*pw,H-6,n0(t),{ta:"middle",fs:10,mono:1,fill:tok("--ink-3")})).join("");
+  const chars=Math.max(10,Math.floor(ml/6.1));
+  L.forEach((r,i)=>{const yy=8+i*rh, w=Math.max(2,r.dur/top*pw);
+    s+=`<rect class="mk" x="${ml}" y="${yy+4}" width="${w}" height="${rh-10}" fill="${cor(r.nat)}" rx="1.5"
+      ${D({t:r.ati,v:`${r.nat} · ${r.rec} · ${n1(r.dur)} s`})}/>`;
+    s+=T(ml-8,yy+rh/2+1,corta(r.ati,chars),{ta:"end",fs:10.5,fill:tok("--ink-2"),dom:"middle"});
+    s+=T(ml+w+7,yy+rh/2+1,n1(r.dur),{fs:10.5,mono:1,fw:600,fill:tok("--ink-2"),dom:"middle"});});
+  s+=`<line x1="${ml}" y1="6" x2="${ml}" y2="${L.length*rh+8}" stroke="${tok("--axis")}"/>`;
+  box.innerHTML=SV(W,H,s);
+}
+
+/* ---------- tabela ---------- */
+function tabela(m){
+  const fim=new Map(m.linhas.map(r=>[r.id,r.fim])), ini=new Map(m.linhas.map(r=>[r.id,r.ini]));
+  tbody.innerHTML=S.rows.map(r=>`<tr class="${r.on?"":"off"}">
+    <td style="text-align:center"><input class="chk" type="checkbox" id="k${r.id}" ${r.on?"checked":""}
+      data-f="on" data-id="${r.id}" aria-label="Ativa"></td>
+    <td><input id="rc${r.id}" data-f="rec" data-id="${r.id}" value="${esc(r.rec)}" placeholder="Operador"></td>
+    <td><input id="at${r.id}" data-f="ati" data-id="${r.id}" value="${esc(r.ati)}" placeholder="Descrição da atividade"></td>
+    <td><select id="nt${r.id}" data-f="nat" data-id="${r.id}">${NAT.map(n=>
+      `<option ${n===r.nat?"selected":""}>${n}</option>`).join("")}</select></td>
+    <td class="num"><input id="du${r.id}" data-f="dur" data-id="${r.id}" type="number" step="0.1" min="0"
+      value="${r.dur===null?"":r.dur}" placeholder="—"></td>
+    <td class="num"><input id="in${r.id}" data-f="ini" data-id="${r.id}" type="number" step="0.1" min="0"
+      value="${r.ini===null?"":r.ini}" placeholder="${r.on&&ini.has(r.id)?n1(ini.get(r.id)):"auto"}"></td>
+    <td class="calc">${r.on&&fim.has(r.id)?n1(fim.get(r.id)):"—"}</td>
+    <td class="num"><input id="ci${r.id}" data-f="cic" data-id="${r.id}" type="number" step="1" min="1" value="${r.cic}"></td>
+    <td><button class="x" data-del="${r.id}" aria-label="Remover linha">×</button></td></tr>`).join("")
+    ||`<tr><td colspan="9" class="empty">Nenhuma atividade. Use “Nova atividade” ou carregue o exemplo.</td></tr>`;
+  const ativas=m.linhas.length;
+  rowinfo.textContent=`${ativas} ativa${ativas===1?"":"s"} de ${S.rows.length} · ${n1(m.totalGeral)} s lançados`;
+}
+
+/* ---------- render ---------- */
+let W=760;
+function medir(){const e=document.getElementById("c1");W=Math.max(300,Math.round(e.clientWidth||760));
+  return {narrow:Math.max(300,Math.round(e.clientWidth||760)),
+          wide:Math.max(300,Math.round(document.getElementById("c3").clientWidth||760))};}
+function render(){
+  const m=calc(); kpis(m); diag(m); tabela(m);
+  const d=medir(); g1(m,d.narrow); g2(m,Math.max(300,Math.round(document.getElementById("c2").clientWidth||760)));
+  g3(m,d.wide); g4(m,Math.max(300,Math.round(document.getElementById("c4").clientWidth||760)));
+  salvar();
+}
+const kpisEl=document.getElementById("kpis"), diagEl=document.getElementById("diag"),
+  tbody=document.getElementById("tbody"), rowinfo=document.getElementById("rowinfo"),
+  l1=document.getElementById("l1"), l3=document.getElementById("l3");
+
+/* ---------- tooltip ---------- */
+const tip=document.getElementById("tip");
+document.addEventListener("mouseover",e=>{const t=e.target.closest(".mk");if(!t)return;
+  tip.innerHTML=`${esc(t.dataset.t)}<br><b>${esc(t.dataset.v)}</b>`;tip.style.opacity="1";});
+document.addEventListener("mousemove",e=>{if(tip.style.opacity!=="1")return;
+  const r=tip.getBoundingClientRect();
+  tip.style.left=Math.min(innerWidth-r.width-8,e.clientX+14)+"px";
+  tip.style.top=Math.max(8,e.clientY-r.height-10)+"px";});
+document.addEventListener("mouseout",e=>{if(e.target.closest(".mk"))tip.style.opacity="0";});
+
+/* ---------- eventos ---------- */
+document.addEventListener("input",e=>{
+  const t=e.target;
+  if(t.dataset.f){const r=S.rows.find(x=>x.id==t.dataset.id);if(!r)return;
+    const f=t.dataset.f;
+    if(f==="on")r.on=t.checked;
+    else if(f==="dur"||f==="ini")r[f]=t.value===""?null:+t.value;
+    else if(f==="cic")r.cic=Math.max(1,+t.value||1);
+    else r[f]=t.value;
+    if(f==="rec"||f==="ati"||f==="nat"||f==="dur"||f==="ini"||f==="cic"||f==="on"){
+      const m=calc();kpis(m);diag(m);
+      const d=medir();g1(m,d.narrow);g2(m,Math.max(300,Math.round(document.getElementById("c2").clientWidth||760)));
+      g3(m,d.wide);g4(m,Math.max(300,Math.round(document.getElementById("c4").clientWidth||760)));
+      rowinfo.textContent=`${m.linhas.length} ativa${m.linhas.length===1?"":"s"} de ${S.rows.length} · ${n1(m.totalGeral)} s lançados`;
+      document.querySelectorAll("tbody tr").forEach((tr,i)=>{if(S.rows[i])tr.className=S.rows[i].on?"":"off";});
+      const fim=new Map(m.linhas.map(x=>[x.id,x.fim]));
+      document.querySelectorAll("tbody tr").forEach((tr,i)=>{const row=S.rows[i];if(!row)return;
+        tr.children[6].textContent=row.on&&fim.has(row.id)?n1(fim.get(row.id)):"—";});
+      salvar();}
+    return;}
+  if(t.id==="pProc")S.proc=t.value;
+  else if(t.id==="pTakt")S.takt=+t.value||0;
+  else if(t.id==="pPpc")S.ppc=Math.max(1,+t.value||1);
+  else if(t.id==="pNmaq")S.nmaq=Math.max(1,+t.value||1);
+  else return;
+  const m=calc();kpis(m);diag(m);const d=medir();
+  g1(m,d.narrow);g2(m,Math.max(300,Math.round(document.getElementById("c2").clientWidth||760)));
+  g3(m,d.wide);g4(m,Math.max(300,Math.round(document.getElementById("c4").clientWidth||760)));salvar();
+});
+document.addEventListener("click",e=>{
+  const del=e.target.closest("[data-del]");
+  if(del){S.rows=S.rows.filter(r=>r.id!=del.dataset.del);render();}
+});
+document.getElementById("bAdd").onclick=()=>{
+  const ult=S.rows[S.rows.length-1];
+  S.rows.push(mk(ult?ult.rec:"Operador","","Externo",null,null,ult?ult.cic:1,true));
+  render();const el=document.getElementById("at"+S.rows[S.rows.length-1].id);if(el)el.focus();};
+document.getElementById("bSeq").onclick=()=>{const c={};
+  S.rows.forEach(r=>{if(!r.on||!r.ati.trim())return;const k=r.rec.trim()||"(sem recurso)";
+    r.ini=c[k]||0;c[k]=r.ini+(+r.dur||0);});render();};
+document.getElementById("bEx").onclick=()=>{carregar(EXEMPLO);params();render();};
+document.getElementById("bClr").onclick=()=>{S={proc:"",takt:0,ppc:1,nmaq:1,rows:[]};params();render();};
+document.getElementById("bIo").onclick=()=>{const io=document.getElementById("io");
+  io.classList.toggle("open");if(io.classList.contains("open")){document.getElementById("csv").value=paraCsv();
+    io.scrollIntoView({behavior:"smooth",block:"nearest"});}};
+document.getElementById("bCopy").onclick=async e=>{const txt=document.getElementById("csv").value;
+  try{await navigator.clipboard.writeText(txt);msg("Copiado para a área de transferência.");}
+  catch{document.getElementById("csv").select();msg("Selecionado — use Ctrl+C para copiar.");}};
+document.getElementById("bLoad").onclick=()=>{
+  const linhas=document.getElementById("csv").value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const novas=[];let ruins=0;
+  linhas.forEach((l,i)=>{if(i===0&&/recurso/i.test(l)&&/natureza/i.test(l))return;
+    const p=l.split(";").map(x=>x.trim());
+    if(p.length<3){ruins++;return;}
+    const num=v=>v===""||v===undefined||isNaN(+v.replace(",","."))?null:+v.replace(",",".");
+    novas.push(mk(p[0],p[1],p[2],num(p[3]),num(p[4]),num(p[5])||1,!/^(n|não|nao|false|0)$/i.test(p[6]||"sim")));});
+  if(!novas.length){msg("Nenhuma linha válida encontrada.",true);return;}
+  S.rows=novas;render();msg(`${novas.length} atividade${novas.length===1?"":"s"} carregada${novas.length===1?"":"s"}.`+(ruins?` ${ruins} linha(s) ignorada(s).`:""));};
+function msg(t,bad){const el=document.getElementById("iomsg");el.textContent=t;el.className="msg"+(bad?" bad":"");
+  clearTimeout(msg.t);msg.t=setTimeout(()=>el.textContent="",4000);}
+function paraCsv(){return "recurso;atividade;natureza;duracao;inicio;ciclo;ativo\n"+
+  S.rows.map(r=>[r.rec,r.ati,r.nat,r.dur??"",r.ini??"",r.cic,r.on?"sim":"nao"].join(";")).join("\n");}
+function params(){pProc.value=S.proc;pTakt.value=S.takt||"";pPpc.value=S.ppc;pNmaq.value=S.nmaq;}
+
+/* ---------- persistência local (conveniência; a página funciona sem ela) ---------- */
+function salvar(){try{localStorage.setItem("yamazumi",JSON.stringify(S));}catch{}}
+function restaurar(){try{const v=localStorage.getItem("yamazumi");if(!v)return false;
+  const o=JSON.parse(v);if(!o||!Array.isArray(o.rows))return false;
+  S={proc:o.proc||"",takt:+o.takt||0,ppc:Math.max(1,+o.ppc||1),nmaq:Math.max(1,+o.nmaq||1),
+    rows:o.rows.map(r=>mk(r.rec,r.ati,r.nat,r.dur,r.ini,r.cic,r.on))};return S.rows.length>0;}catch{return false;}}
+
+let rt;const ro=new ResizeObserver(()=>{clearTimeout(rt);rt=setTimeout(()=>{const m=calc();const d=medir();
+  g1(m,d.narrow);g2(m,Math.max(300,Math.round(document.getElementById("c2").clientWidth||760)));
+  g3(m,d.wide);g4(m,Math.max(300,Math.round(document.getElementById("c4").clientWidth||760)));},120);});
+
+if(!restaurar())carregar(EXEMPLO);
+params();render();
+ro.observe(document.querySelector(".wrap"));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>setTimeout(render,30));
+</script>
+</body>
+</html>
